@@ -141,14 +141,14 @@ let businesses = [
     }
 ];
 
-// Global ratings storage (persisted)
-let businessRatings = JSON.parse(localStorage.getItem('icant_business_ratings') || '{}');
+// Global ratings storage (synced from Supabase or localStorage)
+let businessRatings = {};
 
 // Sample Requests (persisted in localStorage)
-let requests = JSON.parse(localStorage.getItem('icant_requests') || '[]');
+var requests = JSON.parse(localStorage.getItem('icant_requests') || '[]');
 
-// Current open request id for modal
-let currentRequestId = null;
+// Current open request id for modal (var for inline onclick handlers)
+var currentRequestId = null;
 
 // Initialize sample data if empty
 function initializeSampleData() {
@@ -254,6 +254,14 @@ function showView(view) {
     if (view === 'business-hub') {
         renderBusinessGrid();
     }
+    if (view === 'templates') {
+        TemplatesModule.refreshContext();
+    }
+    if (view === 'secure-portal') {
+        PortalModule.render();
+    }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // Update dashboard metrics
@@ -383,7 +391,7 @@ function renderBusinessGrid(filteredBusinesses = null) {
 function calculateAverageRating(businessId) {
     const ratings = businessRatings[businessId] || [];
     if (ratings.length === 0) return 0;
-    const sum = ratings.reduce((acc, r) => acc + r.stars, 0);
+    const sum = ratings.reduce((acc, r) => acc + (r.stars || 0), 0);
     return sum / ratings.length;
 }
 
@@ -825,31 +833,118 @@ function submitRating() {
     
     const shortComment = document.getElementById('short-comment').value.trim();
     const longComment = document.getElementById('long-comment').value.trim();
-    
-    if (!businessRatings[currentRatingBusinessId]) {
-        businessRatings[currentRatingBusinessId] = [];
-    }
-    
-    businessRatings[currentRatingBusinessId].push({
-        stars: selectedRatingStars,
-        short: shortComment || "No comment",
-        long: longComment || "",
-        date: new Date().toISOString()
+    const biz = businesses.find(b => b.id === currentRatingBusinessId);
+
+    DataLayer.submitRating(
+        currentRatingBusinessId,
+        biz?.name || '',
+        selectedRatingStars,
+        shortComment || 'No comment',
+        longComment
+    ).then((result) => {
+        if (!businessRatings[currentRatingBusinessId]) {
+            businessRatings[currentRatingBusinessId] = [];
+        }
+        businessRatings[currentRatingBusinessId].push({
+            stars: selectedRatingStars,
+            short: shortComment || 'No comment',
+            long: longComment || '',
+            date: new Date().toISOString()
+        });
+
+        closeRatingModal();
+        const src = result.source === 'supabase' ? 'Synced to Supabase.' : 'Saved locally.';
+        showToast(`Thank you! Your rating helps other customers. ${src}`, 'success');
+
+        if (document.getElementById('view-business-hub').classList.contains('active')) {
+            renderBusinessGrid();
+        }
     });
-    
-    localStorage.setItem('icant_business_ratings', JSON.stringify(businessRatings));
-    
-    closeRatingModal();
-    showToast("Thank you! Your rating helps other customers.", "success");
-    
-    if (document.getElementById('view-business-hub').classList.contains('active')) {
-        renderBusinessGrid();
+}
+
+function updateBackendStatusBadge() {
+    const badge = document.getElementById('backend-status-badge');
+    if (!badge) return;
+    const status = DataLayer.getConnectionStatus();
+    if (status === 'connected') {
+        badge.className = 'text-xs px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 font-medium self-start';
+        badge.innerHTML = '<i class="fa-solid fa-circle text-[8px] mr-1 text-emerald-500"></i> Supabase connected';
+    } else {
+        badge.className = 'text-xs px-3 py-1.5 rounded-full bg-slate-100 text-slate-600 font-medium self-start cursor-pointer hover:bg-slate-200';
+        badge.innerHTML = '<i class="fa-solid fa-circle text-[8px] mr-1 text-slate-400"></i> Local mode · tap to connect';
+        badge.onclick = openSupabaseSettings;
     }
 }
 
-function initializeApp() {
+function openSupabaseSettings() {
+    const modalHTML = `
+        <div id="supabase-settings-modal" onclick="if (event.target.id === 'supabase-settings-modal') this.remove()" class="fixed inset-0 bg-black/60 z-[150] flex items-center justify-center p-4">
+            <div onclick="event.stopImmediatePropagation()" class="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden">
+                <div class="px-6 py-5 border-b bg-slate-50 flex justify-between items-center">
+                    <div>
+                        <div class="font-semibold text-lg">Supabase Connection</div>
+                        <div class="text-xs text-slate-500">Sync templates &amp; ratings to your project</div>
+                    </div>
+                    <button onclick="document.getElementById('supabase-settings-modal').remove()" class="text-2xl text-slate-300">&times;</button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">PROJECT URL</label>
+                        <input id="supabase-url-input" type="url" value="${window.ICANT_CONFIG.supabaseUrl || ''}" placeholder="https://xxxx.supabase.co"
+                               class="w-full border border-slate-300 rounded-2xl px-4 py-3 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">ANON KEY</label>
+                        <input id="supabase-key-input" type="password" value="${window.ICANT_CONFIG.supabaseAnonKey || ''}" placeholder="eyJ..."
+                               class="w-full border border-slate-300 rounded-2xl px-4 py-3 text-sm">
+                    </div>
+                    <p class="text-[10px] text-slate-400">Run <code class="bg-slate-100 px-1 rounded">supabase/schema.sql</code> in your SQL editor first. Leave blank for offline demo mode.</p>
+                </div>
+                <div class="px-6 py-4 border-t bg-slate-50 flex gap-3">
+                    <button onclick="document.getElementById('supabase-settings-modal').remove()" class="flex-1 py-3 border rounded-2xl text-sm">Cancel</button>
+                    <button onclick="saveSupabaseSettings()" class="flex-1 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-semibold">Save &amp; Sync</button>
+                </div>
+            </div>
+        </div>`;
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+}
+
+async function saveSupabaseSettings() {
+    const url = document.getElementById('supabase-url-input').value;
+    const key = document.getElementById('supabase-key-input').value;
+    DataLayer.saveSupabaseConfig(url, key);
+    document.getElementById('supabase-settings-modal')?.remove();
+    updateBackendStatusBadge();
+    await TemplatesModule.load();
+    businessRatings = await DataLayer.fetchAllRatingsGrouped();
+    showToast(url ? 'Supabase connected. Templates synced.' : 'Switched to local-only mode.', 'success');
+}
+
+function openMobileMenu() {
+    document.getElementById('mobile-menu-sheet')?.classList.remove('hidden');
+}
+
+function closeMobileMenu() {
+    document.getElementById('mobile-menu-sheet')?.classList.add('hidden');
+}
+
+function bindTemplateContextInputs() {
+    ['business-name', 'account-number', 'issue-category', 'urgency', 'business-phone'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', () => TemplatesModule.refreshContext());
+        if (el) el.addEventListener('change', () => TemplatesModule.refreshContext());
+    });
+}
+
+async function initializeApp() {
     initializeTailwind();
+    DataLayer.init();
     initializeSampleData();
+
+    businessRatings = await DataLayer.fetchAllRatingsGrouped();
+    await TemplatesModule.load();
+    updateBackendStatusBadge();
+    bindTemplateContextInputs();
     
     showView('dashboard');
     updateMetrics();
@@ -858,13 +953,15 @@ function initializeApp() {
     setTimeout(() => {
         renderRequestsList();
         renderBusinessGrid();
+        PortalModule.render();
     }, 800);
     
     addKeyboardShortcuts();
+    initPWA();
     
     setTimeout(() => {
         if (!localStorage.getItem('icant_welcomed')) {
-            showToast("Welcome to the iCant Solutions demo. All data is saved locally in your browser.", "info", 5200);
+            showToast("Welcome to iCant Solutions. Data saves locally; connect Supabase in Templates for cloud sync.", "info", 5200);
             localStorage.setItem('icant_welcomed', 'true');
         }
     }, 2200);
@@ -875,9 +972,9 @@ function initializeApp() {
         logoArea.onclick = () => showView('dashboard');
     }
     
-    window.iCant = { showView, openRequestModal, simulateAgentUpdate, businesses, requests };
+    window.iCant = { showView, openRequestModal, simulateAgentUpdate, businesses, get requests() { return requests; } };
     
-    console.log('%c[iCant Solutions] App initialized successfully. Domain-ready static MVP.', 'color:#64748b; font-size:9px');
+    console.log('%c[iCant Solutions] App initialized. PWA + Supabase-ready.', 'color:#64748b; font-size:9px');
 }
 
 window.onload = initializeApp;

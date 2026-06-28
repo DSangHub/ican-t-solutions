@@ -2,9 +2,18 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#1e40af">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="iCant">
+    <meta name="description" content="We talk to automated systems so you don't have to.">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icons/icon-192.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="icons/icon-192.svg">
     <title>iCant Solutions • We Talk So You Don't Have To</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Space+Grotesk:wght@500;600&display=swap');
@@ -15,6 +24,48 @@
         
         body {
             font-family: 'Inter', system_ui, sans-serif;
+            padding-bottom: env(safe-area-inset-bottom, 0);
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .safe-bottom {
+            padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0));
+        }
+
+        @media (min-width: 768px) {
+            .safe-bottom {
+                padding-bottom: 2rem;
+            }
+        }
+
+        .mobile-nav {
+            padding-bottom: env(safe-area-inset-bottom, 0);
+        }
+
+        .touch-target {
+            min-height: 44px;
+            min-width: 44px;
+        }
+
+        .nav-mobile-scroll {
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+        }
+        .nav-mobile-scroll::-webkit-scrollbar { display: none; }
+
+        .sheet-backdrop {
+            animation: fadeIn 0.2s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .sheet-panel {
+            animation: slideUpSheet 0.25s ease;
+        }
+        @keyframes slideUpSheet {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
         }
         
         .font-display {
@@ -157,11 +208,13 @@
                 </div>
 
                 <!-- Desktop Nav -->
-                <div class="hidden md:flex items-center gap-x-1 text-sm">
-                    <button onclick="showView('dashboard')" class="nav-link px-4 py-2 text-slate-600 hover:text-slate-900 font-medium nav-item" data-view="dashboard">Dashboard</button>
-                    <button onclick="showView('new-request')" class="nav-link px-4 py-2 text-slate-600 hover:text-slate-900 font-medium nav-item" data-view="new-request">New Request</button>
-                    <button onclick="showView('my-requests')" class="nav-link px-4 py-2 text-slate-600 hover:text-slate-900 font-medium nav-item" data-view="my-requests">My Requests</button>
-                    <button onclick="showView('business-hub')" class="nav-link px-4 py-2 text-slate-600 hover:text-slate-900 font-medium nav-item" data-view="business-hub">Business Hub</button>
+                <div class="hidden lg:flex items-center gap-x-1 text-sm">
+                    <button onclick="showView('dashboard')" class="nav-link px-3 py-2 text-slate-600 hover:text-slate-900 font-medium nav-item" data-view="dashboard">Dashboard</button>
+                    <button onclick="showView('new-request')" class="nav-link px-3 py-2 text-slate-600 hover:text-slate-900 font-medium nav-item" data-view="new-request">New Request</button>
+                    <button onclick="showView('my-requests')" class="nav-link px-3 py-2 text-slate-600 hover:text-slate-900 font-medium nav-item" data-view="my-requests">My Requests</button>
+                    <button onclick="showView('templates')" class="nav-link px-3 py-2 text-slate-600 hover:text-slate-900 font-medium nav-item" data-view="templates">Templates</button>
+                    <button onclick="showView('secure-portal')" class="nav-link px-3 py-2 text-slate-600 hover:text-slate-900 font-medium nav-item" data-view="secure-portal">Secure Portal</button>
+                    <button onclick="showView('business-hub')" class="nav-link px-3 py-2 text-slate-600 hover:text-slate-900 font-medium nav-item" data-view="business-hub">Business Hub</button>
                 </div>
 
                 <!-- User Menu -->
@@ -173,6 +226,12 @@
                             <div class="text-[10px] text-slate-500 -mt-0.5">Sacramento, CA</div>
                         </div>
                     </div>
+                    
+                    <button onclick="openSupabaseSettings()" 
+                            class="hidden md:block text-xs px-3 py-1.5 rounded-2xl border border-slate-300 hover:bg-slate-50 text-slate-600 font-medium"
+                            title="Supabase settings">
+                        <i class="fa-solid fa-database"></i>
+                    </button>
                     
                     <button onclick="showView('how-it-works')" 
                             class="hidden md:block text-xs px-3 py-1.5 rounded-2xl border border-slate-300 hover:bg-slate-50 text-slate-600 font-medium">
@@ -189,33 +248,76 @@
         </div>
     </nav>
 
+    <!-- PWA Install Banner -->
+    <div id="pwa-install-banner" class="hidden fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] md:bottom-4 left-4 right-4 md:left-auto md:right-4 md:max-w-sm z-[60]">
+        <div class="bg-indigo-600 text-white rounded-2xl p-4 shadow-xl flex items-center gap-3">
+            <i class="fa-solid fa-download text-xl"></i>
+            <div class="flex-1 text-sm">
+                <div class="font-semibold">Install iCant</div>
+                <div class="text-indigo-200 text-xs">Add to home screen for quick access</div>
+            </div>
+            <button id="pwa-install-btn" class="touch-target px-3 py-1.5 bg-white text-indigo-700 rounded-xl text-xs font-bold">Install</button>
+            <button id="pwa-install-dismiss" class="touch-target text-indigo-200 hover:text-white px-1">&times;</button>
+        </div>
+    </div>
+
     <!-- Mobile Bottom Nav -->
-    <div class="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50">
-        <div class="grid grid-cols-5 text-center text-xs">
-            <button onclick="showView('dashboard')" class="py-3 flex flex-col items-center gap-y-0.5 text-slate-500 nav-mobile-item" data-view="dashboard">
-                <i class="fa-solid fa-home text-lg"></i>
-                <span class="text-[10px]">Home</span>
+    <div class="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-lg border-t border-slate-200 z-50 mobile-nav">
+        <div class="flex overflow-x-auto nav-mobile-scroll px-1">
+            <button onclick="showView('dashboard')" class="touch-target flex-1 min-w-[4rem] py-2 flex flex-col items-center justify-center gap-y-0.5 text-slate-500 nav-mobile-item" data-view="dashboard">
+                <i class="fa-solid fa-home text-base"></i>
+                <span class="text-[9px] font-medium">Home</span>
             </button>
-            <button onclick="showView('new-request')" class="py-3 flex flex-col items-center gap-y-0.5 text-slate-500 nav-mobile-item" data-view="new-request">
-                <i class="fa-solid fa-plus-circle text-lg"></i>
-                <span class="text-[10px]">New</span>
+            <button onclick="showView('new-request')" class="touch-target flex-1 min-w-[4rem] py-2 flex flex-col items-center justify-center gap-y-0.5 text-slate-500 nav-mobile-item" data-view="new-request">
+                <i class="fa-solid fa-plus-circle text-base"></i>
+                <span class="text-[9px] font-medium">New</span>
             </button>
-            <button onclick="showView('my-requests')" class="py-3 flex flex-col items-center gap-y-0.5 text-slate-500 nav-mobile-item" data-view="my-requests">
-                <i class="fa-solid fa-list-check text-lg"></i>
-                <span class="text-[10px]">Requests</span>
+            <button onclick="showView('my-requests')" class="touch-target flex-1 min-w-[4rem] py-2 flex flex-col items-center justify-center gap-y-0.5 text-slate-500 nav-mobile-item" data-view="my-requests">
+                <i class="fa-solid fa-list-check text-base"></i>
+                <span class="text-[9px] font-medium">Requests</span>
             </button>
-            <button onclick="showView('business-hub')" class="py-3 flex flex-col items-center gap-y-0.5 text-slate-500 nav-mobile-item" data-view="business-hub">
-                <i class="fa-solid fa-building text-lg"></i>
-                <span class="text-[10px]">Businesses</span>
+            <button onclick="showView('secure-portal')" class="touch-target flex-1 min-w-[4rem] py-2 flex flex-col items-center justify-center gap-y-0.5 text-slate-500 nav-mobile-item" data-view="secure-portal">
+                <i class="fa-solid fa-shield-halved text-base"></i>
+                <span class="text-[9px] font-medium">Portal</span>
             </button>
-            <button onclick="showView('how-it-works')" class="py-3 flex flex-col items-center gap-y-0.5 text-slate-500 nav-mobile-item" data-view="how-it-works">
-                <i class="fa-solid fa-info-circle text-lg"></i>
-                <span class="text-[10px]">How</span>
+            <button onclick="showView('templates')" class="touch-target flex-1 min-w-[4rem] py-2 flex flex-col items-center justify-center gap-y-0.5 text-slate-500 nav-mobile-item" data-view="templates">
+                <i class="fa-solid fa-file-lines text-base"></i>
+                <span class="text-[9px] font-medium">Templates</span>
+            </button>
+            <button onclick="showView('business-hub')" class="touch-target flex-1 min-w-[4rem] py-2 flex flex-col items-center justify-center gap-y-0.5 text-slate-500 nav-mobile-item" data-view="business-hub">
+                <i class="fa-solid fa-building text-base"></i>
+                <span class="text-[9px] font-medium">Hub</span>
+            </button>
+            <button onclick="openMobileMenu()" class="touch-target flex-1 min-w-[4rem] py-2 flex flex-col items-center justify-center gap-y-0.5 text-slate-500">
+                <i class="fa-solid fa-ellipsis text-base"></i>
+                <span class="text-[9px] font-medium">More</span>
             </button>
         </div>
     </div>
 
-    <div class="app-container px-4 md:px-6 pt-6 pb-20 md:pb-8">
+    <!-- Mobile More Menu Sheet -->
+    <div id="mobile-menu-sheet" class="hidden fixed inset-0 z-[120]">
+        <div class="sheet-backdrop absolute inset-0 bg-black/50" onclick="closeMobileMenu()"></div>
+        <div class="sheet-panel absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
+            <div class="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-4"></div>
+            <div class="space-y-1">
+                <button onclick="closeMobileMenu(); showView('how-it-works')" class="touch-target w-full flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-slate-50 text-left">
+                    <i class="fa-solid fa-info-circle text-indigo-500 w-5"></i>
+                    <span class="font-medium text-sm">How it Works</span>
+                </button>
+                <button onclick="closeMobileMenu(); showPricingModal()" class="touch-target w-full flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-slate-50 text-left">
+                    <i class="fa-solid fa-crown text-amber-500 w-5"></i>
+                    <span class="font-medium text-sm">Upgrade to Pro</span>
+                </button>
+                <button onclick="closeMobileMenu(); openSupabaseSettings()" class="touch-target w-full flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-slate-50 text-left">
+                    <i class="fa-solid fa-database text-teal-500 w-5"></i>
+                    <span class="font-medium text-sm">Supabase Connection</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-container px-4 md:px-6 pt-6 safe-bottom">
         
         <!-- DASHBOARD VIEW -->
         <div id="view-dashboard" class="section active">
@@ -399,7 +501,13 @@
                                 <label class="block text-xs font-semibold tracking-wider text-slate-500 mb-1.5">WHAT'S GOING ON? WHAT DO YOU NEED?</label>
                                 <textarea id="issue-description" rows="4" required
                                           class="w-full border border-slate-300 focus:border-indigo-400 transition-colors rounded-3xl px-4 py-3 text-sm resize-y min-h-[110px]"
+                                          oninput="TemplatesModule.refreshContext()"
                                           placeholder="Example: I've been trying to cancel my Xfinity service for 3 weeks. Every time I call I get stuck in a loop or transferred 5 times. I want to cancel without paying early termination fees and get confirmation in writing."></textarea>
+                                <div class="flex flex-wrap gap-2 mt-2">
+                                    <button type="button" onclick="showView('templates')" class="text-xs px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-xl font-semibold hover:bg-indigo-100">
+                                        <i class="fa-solid fa-file-lines mr-1"></i> Browse Templates
+                                    </button>
+                                </div>
                                 <p class="text-[10px] text-slate-400 mt-1.5 px-1">Be as specific as possible. Include dates, reference numbers, and what you've already tried.</p>
                             </div>
                         </div>
@@ -447,6 +555,120 @@
 
             <div id="requests-list" class="space-y-4">
                 <!-- Populated dynamically by JS -->
+            </div>
+        </div>
+
+        <!-- TEMPLATES LIBRARY VIEW -->
+        <div id="view-templates" class="section">
+            <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
+                <div>
+                    <h1 class="text-2xl sm:text-3xl font-semibold tracking-tight">Templates Library</h1>
+                    <p class="text-slate-500 text-sm mt-1">Agent scripts and messages — auto-filled from your current request</p>
+                </div>
+                <div id="backend-status-badge" class="text-xs px-3 py-1.5 rounded-full bg-slate-100 text-slate-600 font-medium self-start">
+                    <i class="fa-solid fa-circle text-[8px] mr-1"></i> Loading...
+                </div>
+            </div>
+
+            <div id="template-context-banner" class="mb-4 p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs"></div>
+
+            <div class="grid lg:grid-cols-5 gap-5">
+                <div class="lg:col-span-2 space-y-3">
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <div class="relative flex-1">
+                            <i class="fa-solid fa-search absolute left-3 top-3 text-slate-400 text-xs"></i>
+                            <input type="text" id="template-search" placeholder="Search templates..." oninput="TemplatesModule.applyFilters()"
+                                   class="w-full pl-9 pr-3 py-2.5 border border-slate-300 rounded-2xl text-sm focus:border-indigo-400">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <select id="template-channel-filter" onchange="TemplatesModule.applyFilters()" class="border border-slate-300 rounded-2xl px-3 py-2 text-xs bg-white">
+                            <option value="all">All channels</option>
+                            <option value="call">Phone</option>
+                            <option value="email">Email</option>
+                            <option value="portal">Portal</option>
+                        </select>
+                        <select id="template-category-filter" onchange="TemplatesModule.applyFilters()" class="border border-slate-300 rounded-2xl px-3 py-2 text-xs bg-white">
+                            <option value="all">All categories</option>
+                        </select>
+                    </div>
+                    <div id="template-list" class="space-y-2 max-h-[50vh] lg:max-h-[calc(100vh-16rem)] overflow-y-auto"></div>
+                </div>
+
+                <div class="lg:col-span-3 bg-white border border-slate-200 rounded-3xl p-5 flex flex-col min-h-[320px]">
+                    <div class="flex items-center justify-between mb-3">
+                        <div id="template-preview-meta" class="text-xs text-slate-500"></div>
+                        <div class="flex gap-2">
+                            <button type="button" onclick="TemplatesModule.copyFilled()" class="text-xs px-3 py-2 border border-slate-300 rounded-xl hover:bg-slate-50 font-medium">
+                                <i class="fa-solid fa-copy"></i> Copy
+                            </button>
+                            <button type="button" onclick="TemplatesModule.applyToDescription()" class="text-xs px-3 py-2 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700">
+                                Apply to Request
+                            </button>
+                        </div>
+                    </div>
+                    <pre id="template-preview" class="flex-1 text-sm text-slate-700 whitespace-pre-wrap font-sans bg-slate-50 rounded-2xl p-4 overflow-y-auto leading-relaxed">Select a template to preview with your request details auto-filled.</pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECURE PORTAL VIEW -->
+        <div id="view-secure-portal" class="section">
+            <div class="mb-6">
+                <h1 class="text-2xl sm:text-3xl font-semibold tracking-tight flex items-center gap-2">
+                    <i class="fa-solid fa-shield-halved text-indigo-600"></i> Secure Portal
+                </h1>
+                <p class="text-slate-500 text-sm mt-1">Share portal credentials safely and chat with your agent during live portal sessions</p>
+            </div>
+
+            <div id="portal-workflow-steps" class="flex justify-between gap-2 mb-6 bg-white border border-slate-200 rounded-3xl p-4"></div>
+
+            <div class="grid lg:grid-cols-2 gap-5">
+                <div class="space-y-4">
+                    <div class="bg-white border border-slate-200 rounded-3xl p-5">
+                        <label class="block text-xs font-semibold tracking-wider text-slate-500 mb-2">LINK TO REQUEST</label>
+                        <select id="portal-request-select" onchange="PortalModule.selectRequest(this.value)" class="w-full border border-slate-300 rounded-2xl px-4 py-3 text-sm bg-white"></select>
+                    </div>
+
+                    <div class="bg-white border border-slate-200 rounded-3xl p-5">
+                        <label class="block text-xs font-semibold tracking-wider text-slate-500 mb-3">SELECT PORTAL</label>
+                        <div id="portal-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
+                    </div>
+
+                    <div id="portal-vault-panel" class="bg-white border border-slate-200 rounded-3xl p-5">
+                        <div class="flex items-center justify-between mb-3">
+                            <label class="text-xs font-semibold tracking-wider text-slate-500">SECURE CREDENTIAL VAULT</label>
+                            <span id="portal-vault-status" class="text-[10px] text-emerald-600 font-medium"></span>
+                        </div>
+                        <div class="space-y-3">
+                            <input type="text" id="portal-username" placeholder="Portal username or email" class="w-full border border-slate-300 rounded-2xl px-4 py-3 text-sm">
+                            <input type="password" id="portal-password" placeholder="Password (encrypted at rest in demo)" class="w-full border border-slate-300 rounded-2xl px-4 py-3 text-sm">
+                            <input type="url" id="portal-custom-url" placeholder="Portal URL (https://...)" class="w-full border border-slate-300 rounded-2xl px-4 py-3 text-sm">
+                            <textarea id="portal-notes" rows="2" placeholder="Notes for agent (2FA method, security questions...)" class="w-full border border-slate-300 rounded-2xl px-4 py-3 text-sm resize-none"></textarea>
+                        </div>
+                        <div class="flex gap-2 mt-4">
+                            <button type="button" onclick="PortalModule.saveCredentials()" class="flex-1 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-semibold hover:bg-indigo-700">
+                                <i class="fa-solid fa-lock mr-1"></i> Save to Vault
+                            </button>
+                            <button type="button" onclick="PortalModule.revokeAccess()" class="px-4 py-3 border border-red-200 text-red-600 rounded-2xl text-sm font-medium hover:bg-red-50">Revoke</button>
+                        </div>
+                        <p class="text-[10px] text-slate-400 mt-3"><i class="fa-solid fa-shield-halved text-emerald-500"></i> Demo stores credentials locally. Production uses encrypted vault + audit log.</p>
+                    </div>
+                </div>
+
+                <div class="bg-white border border-slate-200 rounded-3xl p-5 flex flex-col min-h-[400px]">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="text-xs font-semibold tracking-wider text-slate-500">SECURE AGENT CHAT</div>
+                        <div class="text-emerald-500 text-xs flex items-center gap-1"><i class="fa-solid fa-lock text-[8px]"></i> E2E demo</div>
+                    </div>
+                    <div id="portal-chat-window" class="flex-1 bg-slate-50 border border-slate-200 rounded-2xl p-3 overflow-y-auto mb-3 min-h-[280px] text-sm"></div>
+                    <div class="flex gap-2">
+                        <input id="portal-chat-input" type="text" placeholder="Message your portal agent..." 
+                               class="flex-1 border border-slate-300 rounded-2xl px-4 py-2.5 text-sm"
+                               onkeypress="if (event.key === 'Enter') PortalModule.sendPortalMessage()">
+                        <button onclick="PortalModule.sendPortalMessage()" class="touch-target px-5 bg-indigo-600 text-white rounded-2xl text-sm font-semibold">Send</button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -545,7 +767,12 @@
             <div class="p-6 overflow-y-auto flex-1 text-sm">
                 <!-- Issue Summary -->
                 <div class="mb-5">
-                    <div class="uppercase text-[10px] tracking-[1px] text-slate-500 mb-1">ISSUE SUMMARY</div>
+                    <div class="flex items-center justify-between mb-1">
+                        <div class="uppercase text-[10px] tracking-[1px] text-slate-500">ISSUE SUMMARY</div>
+                        <button onclick="TemplatesModule.openFromRequestModal()" class="text-[10px] px-2 py-1 bg-indigo-50 text-indigo-700 rounded-lg font-semibold hover:bg-indigo-100">
+                            <i class="fa-solid fa-file-lines"></i> Templates
+                        </button>
+                    </div>
                     <div id="modal-issue" class="text-slate-700 leading-snug"></div>
                 </div>
 
@@ -586,9 +813,12 @@
                 </div>
             </div>
 
-            <div class="px-6 py-4 border-t bg-slate-50 flex gap-x-3">
-                <button onclick="closeRequestModal()" class="flex-1 py-2.5 text-sm font-medium border border-slate-300 rounded-2xl hover:bg-white">Close</button>
-                <button onclick="markRequestResolved()" class="flex-1 py-2.5 text-sm font-semibold bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700">Mark as Resolved</button>
+            <div class="px-6 py-4 border-t bg-slate-50 flex flex-wrap gap-x-3 gap-y-2">
+                <button onclick="PortalModule.openForRequest(currentRequestId)" class="flex-1 min-w-[120px] py-2.5 text-sm font-medium border border-indigo-200 text-indigo-700 rounded-2xl hover:bg-indigo-50">
+                    <i class="fa-solid fa-shield-halved"></i> Secure Portal
+                </button>
+                <button onclick="closeRequestModal()" class="flex-1 min-w-[80px] py-2.5 text-sm font-medium border border-slate-300 rounded-2xl hover:bg-white">Close</button>
+                <button onclick="markRequestResolved()" class="flex-1 min-w-[120px] py-2.5 text-sm font-semibold bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700">Mark Resolved</button>
             </div>
         </div>
     </div>
@@ -647,6 +877,11 @@
     <!-- Toast Container -->
     <div id="toast-container" class="fixed bottom-5 right-5 z-[200] space-y-2"></div>
 
+    <script src="config.js"></script>
+    <script src="data-layer.js"></script>
+    <script src="templates.js"></script>
+    <script src="portal.js"></script>
     <script src="app.js"></script>
+    <script src="pwa.js"></script>
 </body>
 </html>
