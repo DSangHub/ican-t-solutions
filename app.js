@@ -243,6 +243,7 @@ function saveRequests() {
 
 // Show specific view
 function showView(view) {
+    if (['new-request', 'my-requests', 'secure-portal'].includes(view) && !AuthModule.requireAuth()) return;
     document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
     
     const target = document.getElementById('view-' + view);
