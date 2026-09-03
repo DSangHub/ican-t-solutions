@@ -13,6 +13,12 @@ function initializeTailwind() {
     };
 }
 
+function escapeHtml(value) {
+    const element = document.createElement('div');
+    element.textContent = String(value ?? '');
+    return element.innerHTML;
+}
+
 // Sample Business Database
 let businesses = [
     {
@@ -145,14 +151,14 @@ let businesses = [
 let businessRatings = {};
 
 // Sample Requests (persisted in localStorage)
-var requests = JSON.parse(localStorage.getItem('icant_requests') || '[]');
+var requests = [];
 
 // Current open request id for modal (var for inline onclick handlers)
 var currentRequestId = null;
 
 // Initialize sample data if empty
 function initializeSampleData() {
-    if (requests.length === 0) {
+    if (false && requests.length === 0) {
         requests = [
             {
                 id: "REQ-2847",
@@ -221,13 +227,18 @@ function initializeSampleData() {
                 ]
             }
         ];
-        localStorage.setItem('icant_requests', JSON.stringify(requests));
+        // Prototype fixture only; private requests are never persisted in browser storage.
     }
 }
 
 // Save requests to localStorage
 function saveRequests() {
-    localStorage.setItem('icant_requests', JSON.stringify(requests));
+    if (!AuthModule.getUser()) {
+        showToast('Sign in is required to save private requests.', 'error');
+        return Promise.reject(new Error('Authentication required'));
+    }
+    const changed = currentRequestId ? requests.find(r => r.id === currentRequestId) : requests[0];
+    return changed ? DataLayer.saveRequest(changed).catch(error => showToast(`Could not securely save: ${error.message}`, 'error')) : Promise.resolve();
 }
 
 // Show specific view
@@ -286,12 +297,12 @@ function renderDashboardActiveRequests() {
     container.innerHTML = active.map(req => `
         <div onclick="openRequestModal('${req.id}')" class="flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 rounded-2xl cursor-pointer transition-colors">
             <div class="flex-1 min-w-0">
-                <div class="font-semibold">${req.business}</div>
-                <div class="text-xs text-slate-500 truncate">${req.description.substring(0, 65)}...</div>
+                <div class="font-semibold">${escapeHtml(req.business)}</div>
+                <div class="text-xs text-slate-500 truncate">${escapeHtml(req.description.substring(0, 65))}...</div>
             </div>
             <div class="text-right ml-3">
-                <div class="status-pill ${req.status === 'In Progress' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}">${req.status}</div>
-                <div class="text-[10px] text-slate-400 mt-0.5">${req.id}</div>
+                <div class="status-pill ${req.status === 'In Progress' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}">${escapeHtml(req.status)}</div>
+                <div class="text-[10px] text-slate-400 mt-0.5">${escapeHtml(req.id)}</div>
             </div>
         </div>
     `).join('');
@@ -319,17 +330,17 @@ function renderRequestsList() {
             <div class="flex justify-between items-start">
                 <div>
                     <div class="flex items-center gap-x-3">
-                        <span class="font-semibold text-xl">${req.business}</span>
-                        <span class="status-pill ${statusColor}">${req.status}</span>
+                        <span class="font-semibold text-xl">${escapeHtml(req.business)}</span>
+                        <span class="status-pill ${statusColor}">${escapeHtml(req.status)}</span>
                     </div>
-                    <div class="text-xs text-slate-400 font-mono mt-0.5">${req.id} • Submitted ${req.submitted}</div>
+                    <div class="text-xs text-slate-400 font-mono mt-0.5">${escapeHtml(req.id)} • Submitted ${escapeHtml(req.submitted)}</div>
                 </div>
                 <div class="text-right">
-                    <div class="text-xs text-slate-500">${req.urgency}</div>
+                    <div class="text-xs text-slate-500">${escapeHtml(req.urgency)}</div>
                 </div>
             </div>
             
-            <div class="mt-3 text-sm text-slate-600 line-clamp-2">${req.description}</div>
+            <div class="mt-3 text-sm text-slate-600 line-clamp-2">${escapeHtml(req.description)}</div>
             
             <div class="mt-4 flex items-center justify-between text-xs">
                 <div class="text-slate-400">Last update: ${new Date(req.lastUpdate).toLocaleDateString('en-US', {month:'short', day:'numeric'})}</div>
@@ -440,6 +451,10 @@ function selectBusinessFromHub(businessId) {
 
 function submitNewRequest(e) {
     e.preventDefault();
+    if (!AuthModule.getUser()) {
+        showToast('Sign in before submitting a private request.', 'error');
+        return;
+    }
     
     const business = document.getElementById('business-name').value.trim();
     const phone = document.getElementById('business-phone').value.trim();
@@ -454,7 +469,7 @@ function submitNewRequest(e) {
     }
     
     const newReq = {
-        id: "REQ-" + Math.floor(1000 + Math.random() * 9000),
+        id: "REQ-" + crypto.randomUUID(),
         business: business,
         phone: phone || "Not provided",
         accountNumber: account || "Not provided",
@@ -496,7 +511,11 @@ function openRequestModal(requestId) {
     
     document.getElementById('modal-business').textContent = req.business;
     document.getElementById('modal-req-id').textContent = req.id;
-    document.getElementById('modal-issue').innerHTML = `<strong>${req.category}</strong><br>${req.description}`;
+    const issue = document.getElementById('modal-issue');
+    issue.replaceChildren();
+    const category = document.createElement('strong');
+    category.textContent = req.category;
+    issue.append(category, document.createElement('br'), document.createTextNode(req.description));
     
     const statusEl = document.getElementById('modal-status-pill');
     statusEl.innerHTML = req.status;
@@ -517,8 +536,8 @@ function renderTimeline(req) {
                 <i class="fa-solid fa-check text-white text-[10px]"></i>
             </div>
             <div class="flex-1 pb-1">
-                <div class="text-xs text-slate-400">${item.time}</div>
-                <div class="text-sm text-slate-700">${item.text}</div>
+                <div class="text-xs text-slate-400">${escapeHtml(item.time)}</div>
+                <div class="text-sm text-slate-700">${escapeHtml(item.text)}</div>
             </div>
         </div>
     `).join('');
@@ -528,9 +547,9 @@ function renderChat(req) {
     const container = document.getElementById('chat-window');
     container.innerHTML = req.chat.map(msg => {
         if (msg.from === 'user') {
-            return `<div class="flex justify-end"><div class="chat-message chat-user">${msg.text}<div class="text-[9px] opacity-60 text-right mt-0.5">${msg.time}</div></div></div>`;
+            return `<div class="flex justify-end"><div class="chat-message chat-user">${escapeHtml(msg.text)}<div class="text-[9px] opacity-60 text-right mt-0.5">${escapeHtml(msg.time)}</div></div></div>`;
         } else {
-            return `<div class="flex"><div class="chat-message chat-agent">${msg.text}<div class="text-[9px] opacity-60 mt-0.5">${msg.time}</div></div></div>`;
+            return `<div class="flex"><div class="chat-message chat-agent">${escapeHtml(msg.text)}<div class="text-[9px] opacity-60 mt-0.5">${escapeHtml(msg.time)}</div></div></div>`;
         }
     }).join('');
     container.scrollTop = container.scrollHeight;
@@ -871,12 +890,14 @@ function updateBackendStatusBadge() {
         badge.innerHTML = '<i class="fa-solid fa-circle text-[8px] mr-1 text-emerald-500"></i> Supabase connected';
     } else {
         badge.className = 'text-xs px-3 py-1.5 rounded-full bg-slate-100 text-slate-600 font-medium self-start cursor-pointer hover:bg-slate-200';
-        badge.innerHTML = '<i class="fa-solid fa-circle text-[8px] mr-1 text-slate-400"></i> Local mode · tap to connect';
-        badge.onclick = openSupabaseSettings;
+        badge.textContent = 'Secure backend not configured';
+        badge.onclick = null;
     }
 }
 
 function openSupabaseSettings() {
+    showToast('Supabase must be configured at deployment time; it cannot be changed by end users.', 'info');
+    return;
     const modalHTML = `
         <div id="supabase-settings-modal" onclick="if (event.target.id === 'supabase-settings-modal') this.remove()" class="fixed inset-0 bg-black/60 z-[150] flex items-center justify-center p-4">
             <div onclick="event.stopImmediatePropagation()" class="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden">
@@ -938,8 +959,9 @@ function bindTemplateContextInputs() {
 
 async function initializeApp() {
     initializeTailwind();
-    DataLayer.init();
-    initializeSampleData();
+    await DataLayer.init();
+    const signedInUser = await AuthModule.init();
+    if (signedInUser) requests = await DataLayer.fetchRequests();
 
     businessRatings = await DataLayer.fetchAllRatingsGrouped();
     await TemplatesModule.load();
@@ -961,7 +983,7 @@ async function initializeApp() {
     
     setTimeout(() => {
         if (!localStorage.getItem('icant_welcomed')) {
-            showToast("Welcome to iCant Solutions. Data saves locally; connect Supabase in Templates for cloud sync.", "info", 5200);
+            showToast("Welcome to iCant Solutions. Private requests require your signed-in account.", "info", 5200);
             localStorage.setItem('icant_welcomed', 'true');
         }
     }, 2200);

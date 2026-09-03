@@ -25,16 +25,58 @@ CREATE TABLE IF NOT EXISTS business_ratings (
     stars INTEGER NOT NULL CHECK (stars >= 1 AND stars <= 5),
     short_comment TEXT,
     long_comment TEXT,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ DEFAULT now()
 );
+ALTER TABLE business_ratings ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+
+CREATE TABLE IF NOT EXISTS profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    display_name TEXT CHECK (char_length(display_name) <= 100),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS requests (
+    id TEXT PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    business TEXT NOT NULL CHECK (char_length(business) <= 200),
+    business_phone TEXT CHECK (char_length(business_phone) <= 40),
+    account_reference TEXT CHECK (char_length(account_reference) <= 200),
+    category TEXT NOT NULL,
+    urgency TEXT NOT NULL DEFAULT 'Medium',
+    description TEXT NOT NULL CHECK (char_length(description) <= 5000),
+    status TEXT NOT NULL DEFAULT 'Received',
+    timeline JSONB NOT NULL DEFAULT '[]'::jsonb,
+    chat JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_profiles_id ON profiles(id);
+CREATE INDEX IF NOT EXISTS idx_requests_user_id ON requests(user_id);
 
 CREATE INDEX IF NOT EXISTS idx_templates_category ON templates(category);
 CREATE INDEX IF NOT EXISTS idx_templates_channel ON templates(channel);
 CREATE INDEX IF NOT EXISTS idx_ratings_business_id ON business_ratings(business_id);
 
--- Row Level Security: public read, anonymous insert for demo
+-- Row Level Security: public catalog data; authenticated ownership for private data.
 ALTER TABLE templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE business_ratings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE requests ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public read templates" ON templates;
+DROP POLICY IF EXISTS "Public read ratings" ON business_ratings;
+DROP POLICY IF EXISTS "Anyone can insert ratings" ON business_ratings;
+DROP POLICY IF EXISTS "Signed-in users insert own ratings" ON business_ratings;
+DROP POLICY IF EXISTS "Users read own profile" ON profiles;
+DROP POLICY IF EXISTS "Users insert own profile" ON profiles;
+DROP POLICY IF EXISTS "Users update own profile" ON profiles;
+DROP POLICY IF EXISTS "Users read own requests" ON requests;
+DROP POLICY IF EXISTS "Users insert own requests" ON requests;
+DROP POLICY IF EXISTS "Users update own requests" ON requests;
+DROP POLICY IF EXISTS "Users delete own requests" ON requests;
 
 CREATE POLICY "Public read templates" ON templates
     FOR SELECT USING (is_public = true);
@@ -42,8 +84,23 @@ CREATE POLICY "Public read templates" ON templates
 CREATE POLICY "Public read ratings" ON business_ratings
     FOR SELECT USING (true);
 
-CREATE POLICY "Anyone can insert ratings" ON business_ratings
-    FOR INSERT WITH CHECK (true);
+CREATE POLICY "Signed-in users insert own ratings" ON business_ratings
+    FOR INSERT TO authenticated WITH CHECK ((SELECT auth.uid()) = user_id);
+
+CREATE POLICY "Users read own profile" ON profiles FOR SELECT TO authenticated USING ((SELECT auth.uid()) = id);
+CREATE POLICY "Users insert own profile" ON profiles FOR INSERT TO authenticated WITH CHECK ((SELECT auth.uid()) = id);
+CREATE POLICY "Users update own profile" ON profiles FOR UPDATE TO authenticated USING ((SELECT auth.uid()) = id) WITH CHECK ((SELECT auth.uid()) = id);
+
+CREATE POLICY "Users read own requests" ON requests FOR SELECT TO authenticated USING ((SELECT auth.uid()) = user_id);
+CREATE POLICY "Users insert own requests" ON requests FOR INSERT TO authenticated WITH CHECK ((SELECT auth.uid()) = user_id);
+CREATE POLICY "Users update own requests" ON requests FOR UPDATE TO authenticated USING ((SELECT auth.uid()) = user_id) WITH CHECK ((SELECT auth.uid()) = user_id);
+CREATE POLICY "Users delete own requests" ON requests FOR DELETE TO authenticated USING ((SELECT auth.uid()) = user_id);
+
+REVOKE ALL ON profiles, requests FROM anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON profiles, requests TO authenticated;
+REVOKE INSERT, UPDATE, DELETE ON business_ratings FROM anon;
+GRANT SELECT ON business_ratings TO anon;
+GRANT SELECT, INSERT ON business_ratings TO authenticated;
 
 -- Seed templates (idempotent via slug)
 INSERT INTO templates (slug, title, category, channel, business_tags, issue_categories, body, sort_order) VALUES

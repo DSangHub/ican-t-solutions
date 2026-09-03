@@ -3,8 +3,8 @@ const ASSETS = [
     '/',
     '/index.html',
     '/app.js',
-    '/config.js',
     '/data-layer.js',
+    '/auth.js',
     '/templates.js',
     '/portal.js',
     '/manifest.json',
@@ -32,6 +32,7 @@ self.addEventListener('fetch', (event) => {
 
     const url = new URL(request.url);
     if (url.origin !== self.location.origin) return;
+    if (url.pathname.includes('/auth/') || url.pathname.includes('/rest/')) return;
 
     event.respondWith(
         caches.match(request).then((cached) => {

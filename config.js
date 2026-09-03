@@ -1,17 +1,9 @@
 /**
  * Supabase configuration for iCant Solutions.
- * Set your project URL and anon key below, or via Settings in the app.
- * Leave empty to use localStorage-only mode (demo works offline).
+ * Set these at deployment time. The publishable/anon key is safe to expose;
+ * authorization is enforced by Supabase Auth and Row Level Security.
  */
 window.ICANT_CONFIG = {
     supabaseUrl: '',
     supabaseAnonKey: ''
 };
-
-// Restore saved credentials from local settings (optional)
-(function loadSavedConfig() {
-    const savedUrl = localStorage.getItem('icant_supabase_url');
-    const savedKey = localStorage.getItem('icant_supabase_anon_key');
-    if (savedUrl) window.ICANT_CONFIG.supabaseUrl = savedUrl;
-    if (savedKey) window.ICANT_CONFIG.supabaseAnonKey = savedKey;
-})();

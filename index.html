@@ -222,8 +222,8 @@
                     <div class="hidden sm:flex items-center gap-x-2 bg-slate-100 rounded-3xl pl-2 pr-4 py-1.5">
                         <div class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-teal-400 rounded-2xl flex items-center justify-center text-white text-xs font-bold shadow-inner">JE</div>
                         <div class="text-sm">
-                            <div class="font-semibold text-slate-800">Jordan Ellis</div>
-                            <div class="text-[10px] text-slate-500 -mt-0.5">Sacramento, CA</div>
+                            <div id="profile-name" class="font-semibold text-slate-800">Secure account</div>
+                            <button type="button" onclick="AuthModule.signOut()" class="text-[10px] text-indigo-600 -mt-0.5">Sign out</button>
                         </div>
                     </div>
                     
@@ -618,7 +618,7 @@
                 <h1 class="text-2xl sm:text-3xl font-semibold tracking-tight flex items-center gap-2">
                     <i class="fa-solid fa-shield-halved text-indigo-600"></i> Secure Portal
                 </h1>
-                <p class="text-slate-500 text-sm mt-1">Share portal credentials safely and chat with your agent during live portal sessions</p>
+                <p class="text-slate-500 text-sm mt-1">Coordinate a customer-controlled portal session without sharing passwords</p>
             </div>
 
             <div id="portal-workflow-steps" class="flex justify-between gap-2 mb-6 bg-white border border-slate-200 rounded-3xl p-4"></div>
@@ -637,29 +637,24 @@
 
                     <div id="portal-vault-panel" class="bg-white border border-slate-200 rounded-3xl p-5">
                         <div class="flex items-center justify-between mb-3">
-                            <label class="text-xs font-semibold tracking-wider text-slate-500">SECURE CREDENTIAL VAULT</label>
+                            <label class="text-xs font-semibold tracking-wider text-slate-500">CUSTOMER-CONTROLLED SIGN-IN</label>
                             <span id="portal-vault-status" class="text-[10px] text-emerald-600 font-medium"></span>
                         </div>
-                        <div class="space-y-3">
-                            <input type="text" id="portal-username" placeholder="Portal username or email" class="w-full border border-slate-300 rounded-2xl px-4 py-3 text-sm">
-                            <input type="password" id="portal-password" placeholder="Password (encrypted at rest in demo)" class="w-full border border-slate-300 rounded-2xl px-4 py-3 text-sm">
-                            <input type="url" id="portal-custom-url" placeholder="Portal URL (https://...)" class="w-full border border-slate-300 rounded-2xl px-4 py-3 text-sm">
-                            <textarea id="portal-notes" rows="2" placeholder="Notes for agent (2FA method, security questions...)" class="w-full border border-slate-300 rounded-2xl px-4 py-3 text-sm resize-none"></textarea>
-                        </div>
+                        <div class="rounded-2xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800">For your protection, iCant never asks for or stores passwords or security-question answers. Open the provider directly and complete sign-in yourself.</div>
                         <div class="flex gap-2 mt-4">
-                            <button type="button" onclick="PortalModule.saveCredentials()" class="flex-1 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-semibold hover:bg-indigo-700">
-                                <i class="fa-solid fa-lock mr-1"></i> Save to Vault
+                            <button type="button" onclick="PortalModule.openProvider()" class="flex-1 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-semibold hover:bg-indigo-700">
+                                <i class="fa-solid fa-arrow-up-right-from-square mr-1"></i> Open Provider Securely
                             </button>
-                            <button type="button" onclick="PortalModule.revokeAccess()" class="px-4 py-3 border border-red-200 text-red-600 rounded-2xl text-sm font-medium hover:bg-red-50">Revoke</button>
+                            <button type="button" onclick="PortalModule.endSession()" class="px-4 py-3 border border-red-200 text-red-600 rounded-2xl text-sm font-medium hover:bg-red-50">End Session</button>
                         </div>
-                        <p class="text-[10px] text-slate-400 mt-3"><i class="fa-solid fa-shield-halved text-emerald-500"></i> Demo stores credentials locally. Production uses encrypted vault + audit log.</p>
+                        <p class="text-[10px] text-slate-400 mt-3"><i class="fa-solid fa-shield-halved text-emerald-500"></i> No provider credentials are collected, transmitted, cached, or stored by iCant.</p>
                     </div>
                 </div>
 
                 <div class="bg-white border border-slate-200 rounded-3xl p-5 flex flex-col min-h-[400px]">
                     <div class="flex items-center justify-between mb-3">
                         <div class="text-xs font-semibold tracking-wider text-slate-500">SECURE AGENT CHAT</div>
-                        <div class="text-emerald-500 text-xs flex items-center gap-1"><i class="fa-solid fa-lock text-[8px]"></i> E2E demo</div>
+                        <div class="text-slate-500 text-xs flex items-center gap-1"><i class="fa-solid fa-user-shield text-[8px]"></i> Signed-in account</div>
                     </div>
                     <div id="portal-chat-window" class="flex-1 bg-slate-50 border border-slate-200 rounded-2xl p-3 overflow-y-auto mb-3 min-h-[280px] text-sm"></div>
                     <div class="flex gap-2">
@@ -879,6 +874,7 @@
 
     <script src="config.js"></script>
     <script src="data-layer.js"></script>
+    <script src="auth.js"></script>
     <script src="templates.js"></script>
     <script src="portal.js"></script>
     <script src="app.js"></script>

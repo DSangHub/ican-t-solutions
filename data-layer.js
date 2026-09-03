@@ -99,11 +99,16 @@ const DataLayer = (function () {
         }
     ];
 
-    function init() {
+    async function init() {
+        // Remove private data and legacy backend configuration created by the prototype.
+        ['icant_requests', 'icant_portal_vault', 'icant_portal_chat', 'icant_supabase_url', 'icant_supabase_anon_key']
+            .forEach(key => localStorage.removeItem(key));
         const { supabaseUrl, supabaseAnonKey } = window.ICANT_CONFIG || {};
         if (supabaseUrl && supabaseAnonKey && window.supabase) {
             try {
                 supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+                const { error } = await supabase.auth.getSession();
+                if (error) throw error;
                 online = true;
             } catch (e) {
                 console.warn('[iCant] Supabase init failed, using local mode.', e);
@@ -122,14 +127,52 @@ const DataLayer = (function () {
         return isOnline() ? 'connected' : 'local';
     }
 
-    function saveSupabaseConfig(url, key) {
-        window.ICANT_CONFIG.supabaseUrl = url.trim();
-        window.ICANT_CONFIG.supabaseAnonKey = key.trim();
-        localStorage.setItem('icant_supabase_url', url.trim());
-        localStorage.setItem('icant_supabase_anon_key', key.trim());
-        supabase = null;
-        online = false;
-        init();
+    function getClient() {
+        return supabase;
+    }
+
+    async function getUser() {
+        if (!isOnline()) return null;
+        const { data, error } = await supabase.auth.getUser();
+        if (error) return null;
+        return data.user;
+    }
+
+    async function fetchRequests() {
+        const user = await getUser();
+        if (!user) return [];
+        const { data, error } = await supabase.from('requests').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        return data.map(r => ({
+            id: r.id, business: r.business, phone: r.business_phone || 'Not provided',
+            accountNumber: r.account_reference || 'Not provided', category: r.category,
+            urgency: r.urgency, description: r.description, status: r.status,
+            submitted: r.created_at.slice(0, 10), lastUpdate: r.updated_at,
+            timeline: r.timeline || [], chat: r.chat || []
+        }));
+    }
+
+    async function ensureProfile() {
+        const user = await getUser();
+        if (!user) return null;
+        const { data, error } = await supabase.from('profiles').upsert({ id: user.id }, { onConflict: 'id' }).select().single();
+        if (error) throw error;
+        return data;
+    }
+
+    async function saveRequest(request) {
+        const user = await getUser();
+        if (!user) throw new Error('Sign in is required');
+        const row = {
+            id: request.id, user_id: user.id, business: request.business,
+            business_phone: request.phone, account_reference: request.accountNumber,
+            category: request.category, urgency: request.urgency,
+            description: request.description, status: request.status,
+            timeline: request.timeline || [], chat: request.chat || [],
+            updated_at: new Date().toISOString()
+        };
+        const { error } = await supabase.from('requests').upsert(row);
+        if (error) throw error;
     }
 
     async function fetchTemplates() {
@@ -194,9 +237,12 @@ const DataLayer = (function () {
 
     async function submitRating(businessId, businessName, stars, shortComment, longComment) {
         if (isOnline()) {
+            const user = await getUser();
+            if (!user) return { ok: false, source: 'auth', error: 'Sign in required' };
             const { error } = await supabase.from('business_ratings').insert({
                 business_id: businessId,
                 business_name: businessName,
+                user_id: user.id,
                 stars,
                 short_comment: shortComment,
                 long_comment: longComment
@@ -221,7 +267,11 @@ const DataLayer = (function () {
         init,
         isOnline,
         getConnectionStatus,
-        saveSupabaseConfig,
+        getClient,
+        getUser,
+        fetchRequests,
+        ensureProfile,
+        saveRequest,
         fetchTemplates,
         fetchRatingsForBusiness,
         fetchAllRatingsGrouped,
